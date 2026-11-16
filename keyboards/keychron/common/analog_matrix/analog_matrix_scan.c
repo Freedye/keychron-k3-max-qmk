@@ -132,14 +132,14 @@ static void HC164_output(uint16_t data, bool bit_flag) {
     ATOMIC_BLOCK_FORCEON {
         for (uint8_t i = 0; i < 15; i++) {
             if (data & 0x1) {
-                writePinHigh(HC164_DS);
+                gpio_write_pin_high(HC164_DS);
             } else {
-                writePinLow(HC164_DS);
+                gpio_write_pin_low(HC164_DS);
             }
             shifter_delay(n);
-            writePinHigh(HC164_CP);
+            gpio_write_pin_high(HC164_CP);
             shifter_delay(n);
-            writePinLow(HC164_CP);
+            gpio_write_pin_low(HC164_CP);
             shifter_delay(n);
             if (bit_flag) {
                 break;
@@ -152,9 +152,9 @@ static void HC164_output(uint16_t data, bool bit_flag) {
 
 static bool select_col(uint8_t col) {
     if (col == 0) {
-        writePinLow(HC164_MR);
+        gpio_write_pin_low(HC164_MR);
         shifter_delay(20);
-        writePinHigh(HC164_MR);
+        gpio_write_pin_high(HC164_MR);
         shifter_delay(20);
         HC164_output(0x01, true);
 #if (SHIFTER_START_INDEX != 0)
@@ -239,21 +239,21 @@ void matrix_init_custom(void) {
     uint8_t  chn_cnt = 0;
 
 #ifdef ANALOG_MATRIX_POWER_PIN
-    setPinOutput(ANALOG_MATRIX_POWER_PIN);
-    writePin(ANALOG_MATRIX_POWER_PIN, ANALOG_MATRIX_POWER_ENABLE_LEVEL);
+    gpio_set_pin_output(ANALOG_MATRIX_POWER_PIN);
+    gpio_write_pin(ANALOG_MATRIX_POWER_PIN, ANALOG_MATRIX_POWER_ENABLE_LEVEL);
 #endif
 #ifdef ANALOG_MATRIX_WAKEUP_PIN
-    setPinInputHigh(ANALOG_MATRIX_WAKEUP_PIN);
+    gpio_set_pin_input_high(ANALOG_MATRIX_WAKEUP_PIN);
 #endif
 #ifdef ENCODER_SWITCH_PIN
-    setPinInputHigh(ENCODER_SWITCH_PIN);
+    gpio_set_pin_input_high(ENCODER_SWITCH_PIN);
 #endif
 
     // Init shift register control pins
-    setPinOutput(HC164_DS);
-    setPinOutput(HC164_CP);
-    setPinOutput(HC164_MR);
-    writePinLow(HC164_MR);
+    gpio_set_pin_output(HC164_DS);
+    gpio_set_pin_output(HC164_CP);
+    gpio_set_pin_output(HC164_MR);
+    gpio_write_pin_low(HC164_MR);
 
     for (uint8_t x = 0; x < MATRIX_ROWS; x++) {
         if (row_pins[x] != NO_PIN) {
@@ -321,7 +321,7 @@ bool matrix_scan_custom(matrix_row_t current_matrix[]) {
     }
 
 #if defined(ENCODER_MATRIX_ROW) && defined(ENCODER_MATRIX_ROW)
-    if (readPin(ENCODER_SWITCH_PIN) == 0) {
+    if (gpio_read_pin(ENCODER_SWITCH_PIN) == 0) {
         if ((raw_matrix[ENCODER_MATRIX_ROW] & (1 << ENCODER_MATROX_COL)) == 0) {
             matrix_changed = true;
             raw_matrix[ENCODER_MATRIX_ROW] |= (1 << ENCODER_MATROX_COL);
@@ -350,17 +350,17 @@ void matrix_enter_low_power(void) {
     adcStop(&ADCD1);
 
 #ifdef HC164_DS
-    setPinInputLow(HC164_DS);
+    gpio_set_pin_input_low(HC164_DS);
 #endif
 #ifdef HC164_CP
-    setPinInputLow(HC164_CP);
+    gpio_set_pin_input_low(HC164_CP);
 #endif
 #ifdef HC164_MR
-    setPinInputLow(HC164_MR);
+    gpio_set_pin_input_low(HC164_MR);
 #endif
 
 #ifdef ANALOG_MATRIX_POWER_PIN
-    writePin(ANALOG_MATRIX_POWER_PIN, !ANALOG_MATRIX_POWER_ENABLE_LEVEL);
+    gpio_write_pin(ANALOG_MATRIX_POWER_PIN, !ANALOG_MATRIX_POWER_ENABLE_LEVEL);
 #endif
 
 #ifdef ANALOG_MATRIX_WAKEUP_PIN
@@ -371,7 +371,7 @@ void matrix_enter_low_power(void) {
     pin_t pins_row[MATRIX_ROWS] = MATRIX_ROW_PINS;
     for (uint8_t x = 0; x < MATRIX_ROWS; x++) {
         if (pins_row[x] != NO_PIN) {
-            setPinInputLow(pins_row[x]);
+            gpio_set_pin_input_low(pins_row[x]);
         }
     }
 }

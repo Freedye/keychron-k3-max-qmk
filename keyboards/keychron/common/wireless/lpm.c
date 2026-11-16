@@ -27,6 +27,9 @@
 #    include <usb_main.h>
 #endif
 #include "debounce.h"
+#ifdef DYNAMIC_DEBOUNCE_ENABLE
+#    include "keychron_debounce.h"
+#endif
 #include "wireless.h"
 #include "indicator.h"
 #include "lpm.h"
@@ -62,7 +65,7 @@ void lpm_init(void) {
 #    if (USB_POWER_CONNECTED_LEVEL == 0)
     gpio_set_pin_input_high(USB_POWER_SENSE_PIN);
 #    else
-    setPinInputLow(USB_POWER_SENSE_PIN);
+    gpio_set_pin_input_low(USB_POWER_SENSE_PIN);
 #    endif
 #endif
     lpm_timer_reset();
@@ -198,7 +201,7 @@ __attribute__((weak)) void lpm_enter_low_power(void) {
     static pin_t dip_switch_pad[] = DIP_SWITCH_PINS;
 
     for (uint8_t i = 0; i < NUMBER_OF_DIP_SWITCHES; i++) {
-        setPinInputLow(dip_switch_pad[i]);
+        gpio_set_pin_input_low(dip_switch_pad[i]);
     }
 #endif
     battery_stop();
@@ -273,7 +276,9 @@ __attribute__((weak)) void lpm_wakeup(void) {
 
     /* Call debounce_free() to avoiding memory leak of debounce_counters as debounce_init()
     invoked in matrix_init() alloc new memory to debounce_counters */
+#ifdef DYNAMIC_DEBOUNCE_ENABLE
     debounce_free();
+#endif
     matrix_init();
 
 #ifdef ENABLE_RGB_MATRIX_PIXEL_RAIN
