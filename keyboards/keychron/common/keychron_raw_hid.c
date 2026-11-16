@@ -103,14 +103,11 @@ void send_analog_matrix(uint8_t *data, uint8_t length) {
 #    endif
 
 void get_firmware_version(uint8_t *data) {
+    /* data is byte 1 of the 32-byte report: "<version> <build date>" and its NUL get the other 31 */
+    _Static_assert(sizeof(KC_FIRMWARE_VERSION) + sizeof(QMK_BUILDDATE) <= 31, "KC_FIRMWARE_VERSION is too long");
     uint8_t i = 0;
-    data[i++] = 'v';
-    if ((DEVICE_VER & 0xF000) != 0) itoa((DEVICE_VER >> 12), (char *)&data[i++], 16);
-    itoa((DEVICE_VER >> 8) & 0xF, (char *)&data[i++], 16);
-    data[i++] = '.';
-    itoa((DEVICE_VER >> 4) & 0xF, (char *)&data[i++], 16);
-    data[i++] = '.';
-    itoa(DEVICE_VER & 0xF, (char *)&data[i++], 16);
+    memcpy(&data[i], KC_FIRMWARE_VERSION, sizeof(KC_FIRMWARE_VERSION) - 1);
+    i += sizeof(KC_FIRMWARE_VERSION) - 1;
     data[i++] = ' ';
     memcpy(&data[i], QMK_BUILDDATE, sizeof(QMK_BUILDDATE));
     i += sizeof(QMK_BUILDDATE);

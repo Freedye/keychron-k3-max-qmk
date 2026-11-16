@@ -1,6 +1,11 @@
 OPT_DEFS += -DFACTORY_TEST_ENABLE -DAPDAPTIVE_NKRO_ENABLE -DVIA_INSECURE
 OPT_DEFS += -DSTATE_NOTIFY_ENABLE
 
+# Firmware version reported to the Keychron web tool (command 0xA1) with the build date.
+# CI passes the release tag or dev-<commit> (qmk compile -e KC_FIRMWARE_VERSION=v0.0.1), local builds report "dev".
+KC_FIRMWARE_VERSION ?= dev
+OPT_DEFS += -DKC_FIRMWARE_VERSION=\"$(KC_FIRMWARE_VERSION)\"
+
 KEYCHRON_COMMON_DIR = $(TOP_DIR)/keyboards/keychron/common
 SRC += \
     $(KEYCHRON_COMMON_DIR)/keychron_task.c \
