@@ -16,8 +16,58 @@ concurrency:
 
 env:
   KEYMAP: keychron
+  FIRST_VERSION: v0.0.1
 
 jobs:
+  # The version every image reports to the Keychron web tool: the next release on master, dev-<commit> elsewhere.
+  # Releases start at v0.0.1, then the patch number goes up by one.
+  version:
+    name: "Pick the version"
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+      release: ${{ steps.pick.outputs.release }}
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Pick the version
+        id: pick
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            version="dev-${GITHUB_SHA:0:6}"
+            release=false
+          else
+            latest="$(gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName // empty')"
+            if [ -z "$latest" ]; then
+              version="$FIRST_VERSION"
+              release=true
+            elif [ "$(gh api "repos/$GH_REPO/commits/$latest" --jq .sha)" = "$GITHUB_SHA" ]; then
+              # A re-run of an already released commit must not publish it twice
+              echo "$GITHUB_SHA is already released as $latest"
+              version="$latest"
+              release=false
+            elif ! [[ "$latest" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::The latest release $latest is not vX.Y.Z"
+              exit 1
+            else
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              version="v${major}.${minor}.$((patch + 1))"
+              release=true
+            fi
+          fi
+          # The version goes into a C string literal and into file names
+          if ! [[ "$version" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+|dev-[0-9a-f]{6})$ ]]; then
+            echo "::error::Unexpected version '$version'"
+            exit 1
+          fi
+          echo "Version $version, release: $release"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
   # Cheap checks on the commit itself: whitespace errors, CRLF line endings, leftover conflict markers
   hygiene:
     name: "Commit hygiene"
@@ -47,6 +97,15 @@ jobs:
             echo "::error::Whitespace errors, CRLF line endings or conflict markers found in the pushed commits"
             exit 1
           }
+
+      - name: Check that every submodule comes from QMK
+        run: |
+          git config -f .gitmodules --get-regexp '^submodule\..*\.url$'
+          bad="$(git config -f .gitmodules --get-regexp '^submodule\..*\.url$' | awk '$2 !~ /^https:\/\/github\.com\/qmk\//')"
+          if [ -n "$bad" ]; then
+            echo "::error::Submodules that do not come from github.com/qmk: $bad"
+            exit 1
+          fi
 
       - name: Check for leftover conflict markers in tracked firmware code
         run: |
@@ -112,6 +171,7 @@ jobs:
 
   build:
     name: "Build ${{ matrix.layout }} ${{ matrix.backlight }}"
+    needs: version
     runs-on: ubuntu-latest
     container: ghcr.io/qmk/qmk_cli
 
@@ -125,6 +185,7 @@ jobs:
       KEYBOARD: keychron/k3_max/${{ matrix.layout }}/${{ matrix.backlight }}
       # The layout is the last part of the name, e.g. k3_max_keychron_rgb_ansi.bin
       FIRMWARE: k3_max_keychron_${{ matrix.backlight }}_${{ matrix.layout }}
+      VERSION: ${{ needs.version.outputs.version }}
 
     steps:
       - name: Disable safe.directory check
@@ -141,7 +202,7 @@ jobs:
 
       - name: Compile
         run: |
-          qmk compile -j $(nproc) -kb "$KEYBOARD" -km "$KEYMAP"
+          qmk compile -j $(nproc) -kb "$KEYBOARD" -km "$KEYMAP" -e "KC_FIRMWARE_VERSION=$VERSION"
 
       - name: Rename and sanity check firmware
         run: |
@@ -159,12 +220,50 @@ jobs:
             exit 1
           fi
 
+      - name: Check the vector table
+        # The container default is sh, this step needs bash for <<< and base-16 arithmetic
+        shell: bash
+        run: |
+          # The image is flashed at 0x08000000: word 0 is the initial stack pointer, word 1 the reset handler
+          read -r sp reset <<< "$(od -A n -t x4 -N 8 "${FIRMWARE}.bin")"
+          sp=$((16#$sp)); reset=$((16#$reset))
+          printf 'Initial SP 0x%08x, reset handler 0x%08x\n' "$sp" "$reset"
+          # STM32F401 SRAM is 0x20000000-0x20018000 (96 KiB on the xE, 64 KiB on the xC)
+          if [ "$sp" -le $((0x20000000)) ] || [ "$sp" -gt $((0x20018000)) ]; then
+            echo "::error::Initial stack pointer is not in the STM32F401 SRAM"
+            exit 1
+          fi
+          # Reset handler: Thumb code (bit 0 set) inside this image
+          end=$((0x08000000 + $(stat -c %s "${FIRMWARE}.bin")))
+          if [ $((reset & 1)) -ne 1 ] || [ "$reset" -lt $((0x08000000)) ] || [ "$reset" -ge "$end" ]; then
+            echo "::error::Reset handler is not Thumb code inside the image"
+            exit 1
+          fi
+
+      - name: Check that the K3 Max ChibiOS fixes are linked
+        run: |
+          elf=".build/$(echo "${KEYBOARD}_${KEYMAP}" | tr '/' '_').elf"
+          # The fixes override weak QMK hooks: they must be strong (T) symbols, not the weak (W) defaults
+          for sym in board_init early_hardware_init_post; do
+            type="$(arm-none-eabi-nm "$elf" | awk -v s="$sym" '$3 == s { print $2 }')"
+            echo "$sym: ${type:-missing}"
+            if [ "$type" != "T" ]; then
+              echo "::error::$sym from keyboards/keychron/k3_max/chibios_fixes.c is not linked"
+              exit 1
+            fi
+          done
+
+      - name: Compile the default keymap
+        run: |
+          qmk compile -j $(nproc) -kb "$KEYBOARD" -km default
+
       - name: Summary
         run: |
           {
             echo "### ${FIRMWARE}.bin"
             echo ""
             echo "- Keyboard: \`${KEYBOARD}\`, keymap: \`${KEYMAP}\`"
+            echo "- Version: \`${VERSION}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Size: $(stat -c %s "${FIRMWARE}.bin") bytes"
             echo "- SHA-256: \`$(sha256sum "${FIRMWARE}.bin" | cut -d' ' -f1)\`"
@@ -184,3 +283,88 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Every green push to master becomes a GitHub release, with the version picked before the build
+  release:
+    name: "Publish release"
+    needs: [version, hygiene, lint, unit-tests, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - name: Checkout release notes and VIA definitions
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/release-notes
+            keyboards/keychron/k3_max/via_json
+
+      - name: Download firmware
+        uses: actions/download-artifact@v7
+        with:
+          pattern: k3_max_keychron_*
+          path: firmware
+          merge-multiple: true
+
+      - name: Write release notes
+        run: |
+          if [ "$VERSION" = "$FIRST_VERSION" ]; then
+            # The first release is described against the stock Keychron K3 Max firmware 1.1.0
+            cp ".github/release-notes/${FIRST_VERSION}.md" notes.md
+          else
+            # Later releases list what changed since our first release
+            {
+              echo "## Changes since ${FIRST_VERSION}"
+              echo ""
+              gh api "repos/$GH_REPO/compare/${FIRST_VERSION}...${GITHUB_SHA}" \
+                --jq '.commits[] | select(.parents | length == 1) | "- \(.commit.message | split("\n")[0]) (\(.sha[0:7]))"'
+              echo ""
+              echo "Full diff: https://github.com/${GH_REPO}/compare/${FIRST_VERSION}...${VERSION}"
+            } > notes.md
+          fi
+          {
+            echo ""
+            echo "## Firmware"
+            echo ""
+            echo "One \`.bin\` per variant, named \`k3_max_keychron_${VERSION}_<backlight>_<layout>.bin\`."
+            echo "Flash it with QMK Toolbox, or from DFU mode with:"
+            echo ""
+            echo '```'
+            echo "dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D k3_max_keychron_${VERSION}_<backlight>_<layout>.bin"
+            echo '```'
+            echo ""
+            echo "| File | SHA-256 |"
+            echo "|---|---|"
+          } >> notes.md
+          # Put the version in the file names, keeping the layout last
+          for f in firmware/k3_max_keychron_*.bin; do
+            name="$(basename "$f" .bin)"
+            new="firmware/k3_max_keychron_${VERSION}_${name#k3_max_keychron_}.bin"
+            mv "$f" "$new"
+            echo "| \`$(basename "$new")\` | \`$(sha256sum "$new" | cut -d' ' -f1)\` |" >> notes.md
+          done
+          {
+            echo ""
+            echo "The Keychron web tool shows \`${VERSION}\` and the build date as the firmware version."
+            echo ""
+            echo "## VIA"
+            echo ""
+            echo "If VIA does not recognize the keyboard, load the definition of your variant,"
+            echo "\`k3_max_<layout>_<backlight>.json\`: Settings → Show Design tab, then Design → Load."
+          } >> notes.md
+          mkdir via
+          cp keyboards/keychron/k3_max/via_json/k3_max_*.json via/
+          cat notes.md
+
+      - name: Publish
+        run: |
+          gh release create "$VERSION" firmware/*.bin via/*.json \
+            --target "$GITHUB_SHA" \
+            --title "K3 Max firmware $VERSION" \
+            --notes-file notes.md
