@@ -222,7 +222,7 @@ void usb_endpoint_in_tx_complete_cb(USBDriver *usbp, usbep_t ep) {
 #endif
     usb_endpoint_in_t *endpoint = usbp->in_params[ep - 1U];
     size_t             n;
-    uint8_t *          buffer;
+    uint8_t           *buffer;
 
     if (endpoint == NULL) {
         return;
@@ -356,13 +356,13 @@ bool usb_endpoint_in_is_inactive(usb_endpoint_in_t *endpoint) {
     return inactive;
 }
 
-bool usb_endpoint_out_receive(usb_endpoint_out_t *endpoint, uint8_t *data, size_t size, sysinterval_t timeout) {
+size_t usb_endpoint_out_receive_bytes(usb_endpoint_out_t *endpoint, uint8_t *data, size_t size, sysinterval_t timeout) {
     osalDbgCheck((endpoint != NULL) && (data != NULL) && (size > 0U));
 
     osalSysLock();
     if (usbGetDriverStateI(endpoint->config.usbp) != USB_ACTIVE) {
         osalSysUnlock();
-        return false;
+        return 0;
     }
 
     if (endpoint->timed_out && timeout != TIME_INFINITE) {
@@ -373,5 +373,9 @@ bool usb_endpoint_out_receive(usb_endpoint_out_t *endpoint, uint8_t *data, size_
     const size_t received = ibqReadTimeout(&endpoint->ibqueue, data, size, timeout);
     endpoint->timed_out   = received == 0;
 
-    return received == size;
+    return received;
+}
+
+bool usb_endpoint_out_receive(usb_endpoint_out_t *endpoint, uint8_t *data, size_t size, sysinterval_t timeout) {
+    return usb_endpoint_out_receive_bytes(endpoint, data, size, timeout) == size;
 }
