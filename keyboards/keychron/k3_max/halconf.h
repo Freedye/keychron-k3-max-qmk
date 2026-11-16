@@ -16,8 +16,6 @@
 
 #pragma once
 
-#define _CHIBIOS_HAL_CONF_VER_8_4_
-
 #define HAL_USE_SPI TRUE
 
 #ifdef LK_WIRELESS_ENABLE
