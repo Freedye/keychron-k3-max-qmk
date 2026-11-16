@@ -78,6 +78,8 @@ enum {
     FACTORY_RESET,
     NKRO_GET,
     NKRO_SET,
+    // Not a Keychron command: local addition for host-side battery readout
+    MISC_GET_BATTERY = 0xF0,
 };
 
 enum {

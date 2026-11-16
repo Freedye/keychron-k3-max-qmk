@@ -34,6 +34,9 @@
 #endif
 #if defined(LK_WIRELESS_ENABLE) || defined(KC_BLUETOOTH_ENABLE)
 #    include "wireless.h"
+#    include "battery.h"
+#    include "transport.h"
+#    include "lpm.h"
 #    ifdef LK_WIRELESS_ENABLE
 #        include "lkbt51.h"
 #    else
@@ -226,6 +229,26 @@ bool kc_raw_hid_rx(uint8_t src, uint8_t *data, uint8_t length) {
                 case NKRO_GET ... NKRO_SET:
                     nkro_rx(data, length);
                     break;
+
+                case MISC_GET_BATTERY: {
+#    if defined(LK_WIRELESS_ENABLE)
+                    uint16_t mv     = battery_get_voltage();
+                    uint8_t  charge = BAT_NOT_CHARGING;
+#        if defined(BAT_CHARGING_PIN)
+                    if (usb_power_connected()) charge = gpio_read_pin(BAT_CHARGING_PIN) == BAT_CHARGING_LEVEL ? BAT_CHARGING : BAT_FULL_CHARGED;
+#        endif
+                    data[2] = KC_SUCCESS;
+                    data[3] = battery_get_percentage();
+                    data[4] = mv & 0xFF;
+                    data[5] = mv >> 8;
+                    data[6] = charge;
+                    data[7] = get_transport();
+                    data[8] = wireless_get_state();
+                    data[9] = 1; // response layout version
+#    else
+                    data[2] = KC_FAIL;
+#    endif
+                } break;
 
                 default:
                     data[0] = 0xFF;
