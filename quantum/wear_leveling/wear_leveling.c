@@ -302,23 +302,35 @@ static wear_leveling_status_t wear_leveling_write_consolidated(void) {
  */
 static wear_leveling_status_t wear_leveling_consolidate_force(void) {
     wl_dprintf("Erasing backing store\n");
-    wear_leveling_unlock();
 
-    // Erase the backing store. Expectation is that any un-written values that are read back after this call come back as zero.
-    bool ok = backing_store_erase();
-    if (!ok) {
-        wl_dprintf("Failed to erase backing store\n");
+    // Some backing stores (e.g. STM32F4xx flash) must be unlocked to be erased. Callers such as the write log playback
+    // do not hold the unlock, so take it here and release it again below, only if it was acquired by this function.
+    backing_store_lock_status_t lock_status = wear_leveling_unlock();
+    if (lock_status == STATUS_FAILURE) {
+        wear_leveling_lock();
         return WEAR_LEVELING_FAILED;
     }
 
-    // Write the cache to the first section of the backing store.
-    wear_leveling_status_t status = wear_leveling_write_consolidated();
-    if (status == WEAR_LEVELING_FAILED) {
-        wl_dprintf("Failed to write consolidated data\n");
+    // Erase the backing store. Expectation is that any un-written values that are read back after this call come back as zero.
+    wear_leveling_status_t status = WEAR_LEVELING_FAILED;
+    if (!backing_store_erase()) {
+        wl_dprintf("Failed to erase backing store\n");
+    } else {
+        // Write the cache to the first section of the backing store.
+        status = wear_leveling_write_consolidated();
+        if (status == WEAR_LEVELING_FAILED) {
+            wl_dprintf("Failed to write consolidated data\n");
+        }
+
+        // Next write of the log occurs after the consolidated values at the start of the backing store.
+        wear_leveling.write_address = (WEAR_LEVELING_LOGICAL_SIZE) + 8; // +8 due to the FNV1a_64 of the consolidated area
     }
 
-    // Next write of the log occurs after the consolidated values at the start of the backing store.
-    wear_leveling.write_address = (WEAR_LEVELING_LOGICAL_SIZE) + 8; // +8 due to the FNV1a_64 of the consolidated area
+    if (lock_status == STATUS_SUCCESS) {
+        if (wear_leveling_lock() == STATUS_FAILURE) {
+            status = WEAR_LEVELING_FAILED;
+        }
+    }
 
     return status;
 }
