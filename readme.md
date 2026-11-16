@@ -1,97 +1,96 @@
-# Keychron QMK Firmware
+# Keychron K3 Max firmware
 
-[![Star this repo](https://img.shields.io/github/stars/Keychron/qmk_firmware?style=social&label=Star%20this%20repo)](https://github.com/Keychron/qmk_firmware)
+Unofficial QMK firmware for the Keychron K3 Max. It starts from Keychron's own firmware (Keychron
+`qmk_firmware`, branch `2025q3`) and brings it up to date with upstream QMK. It is not made or supported by
+Keychron.
 
-![Keychron Keyboards](https://raw.githubusercontent.com/Keychron/Keychron-Keyboards-Hardware-Design/main/docs/assets/hero-keychron-hardware-design.jpg)
+## What is different from the stock firmware
 
-Official QMK firmware for Keychron and Lemokey keyboards. This repository contains the firmware source, build configurations, and keymaps for 63+ boards across the Q, Q HE, Q Max, K HE, K Max, K Pro, V, V Max, C Pro, S, X, and Lemokey series.
+- **Current QMK**: Keychron 2025q3 is built on QMK as of 2025-09-10; this firmware merges QMK as of 2026-11-15.
+  Every submodule comes from QMK, ChibiOS included (HAL 9.1 instead of Keychron's 8.4): the Keychron ChibiOS
+  fixes the K3 Max needs live in [`keyboards/keychron/k3_max`](keyboards/keychron/k3_max/).
+- **Raw HID over Bluetooth and 2.4 GHz**, not only over USB, with and without VIA.
+- **Battery readout**: raw HID command `0xA7 0xF0` returns level, voltage, charging state, transport and wireless
+  state.
+- **Release number as firmware version** in the Keychron web tool.
+- Fixes to the EEPROM emulation and to the build of the ANSI RGB and white-backlight variants.
 
-## Why Open Source?
+Keymaps, layouts, lighting effects and USB identity (VID/PID, device version 1.1.0) are the stock ones. The
+[v0.0.1 release notes](.github/release-notes/v0.0.1.md) list every change in detail, including the upstream QMK
+fixes that matter for this keyboard and the battery reply format.
 
-Keychron is the first major keyboard brand to fully open-source both its [firmware](https://github.com/Keychron/qmk_firmware) and [hardware design](https://github.com/Keychron/Keychron-Keyboards-Hardware-Design). We believe you should be able to see, verify, and modify every line of code that runs on your keyboard. Open source means full transparency — no black boxes between you and your hardware.
+## Download
 
-We also want to build something bigger than what any single company can do alone. By opening our firmware to the community, developers and enthusiasts can push what keyboards are capable of — custom keymaps, new features, creative workflows — and those contributions make every Keychron keyboard better for everyone.
+Every release on the [Releases](https://github.com/Freedye/keychron-k3-max-qmk/releases) page has:
 
-## Features
+- six firmware files, `k3_max_keychron_<version>_<backlight>_<layout>.bin`, with their SHA-256 in the notes.
+  Pick your keyboard: layout `ansi`, `iso` or `jis`, backlight `rgb` or `white`;
+- the six VIA definitions, `k3_max_<layout>_<backlight>.json`.
 
-- **Hall Effect magnetic switch support** — adjustable actuation and rapid trigger on HE boards
-- **Wireless connectivity** — Bluetooth 5.1 and 2.4 GHz firmware for wireless models
-- **[Keychron Launcher](https://launcher.keychron.com/)** — remap keys, tune HE settings, and configure lighting from your browser with no setup
-- **RGB Matrix lighting** — per-key RGB effects and customization
-- **Multiple layout variants** — ANSI, ISO, and JIS for every supported board
-- **Full QMK feature set** — layers, tap-dance, combos, macros, encoders, OLED, and more
+## Flash
 
-## Getting Started
+1. Set the mode switch to **Cable**.
+2. Unplug the keyboard, then hold **Esc** (or the reset button under the space bar) while plugging the USB cable
+   back in. The keyboard starts in DFU mode, shown as *STM32 BOOTLOADER* (USB ID `0483:df11`).
+3. Flash the `.bin` with [QMK Toolbox](https://github.com/qmk/qmk_toolbox), or with `dfu-util`:
 
-### Option A: Use Keychron Launcher (no code required)
+   ```bash
+   dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D k3_max_keychron_v0.0.1_rgb_iso.bin
+   ```
 
-If you just want to remap keys, tune Hall Effect settings, or change lighting, you don't need to build firmware:
+   On Windows the DFU device needs the WinUSB driver: QMK Toolbox installs it, or use Zadig.
 
-1. Open [Keychron Launcher](https://launcher.keychron.com/) in a Chromium-based browser such as Google Chrome, Microsoft Edge, Brave, Opera, or Vivaldi
-2. Connect your Keychron keyboard via USB
-3. Remap keys, configure layers, adjust lighting, and fine-tune HE sensitivity — changes apply instantly
+The DFU bootloader is in the MCU ROM and cannot be overwritten, so a failed flash or a wrong variant is fixed by
+entering DFU mode again and flashing the right file. Updating from the Keychron Launcher installs the stock
+firmware over this one.
 
-Keychron Launcher works out of the box with no JSON import required, and supports features beyond VIA such as Hall Effect actuation point tuning and rapid trigger configuration. Safari and other non-Chromium browsers will not work with Keychron Launcher.
+## Check what is flashed
 
-### Option B: Build from source
+The Keychron Launcher shows the firmware version as `<version> <build date>`:
 
-Set up your build environment and compile custom firmware:
+| Version | Firmware |
+|---|---|
+| `v0.0.1`, `v0.0.2`, ... | A release from this repository |
+| `dev-<commit>` | A CI build of a branch that is not `master` |
+| `dev` | A local build |
+
+## Configure
+
+- **[Keychron Launcher](https://launcher.keychron.com/)**: everything, including the Keychron-only settings
+  (per-key RGB, mixed lighting, report rate, wireless settings).
+- **[VIA](https://usevia.app/)**: keymap, layers, macros and lighting. If VIA does not recognize the keyboard,
+  load the definition of your variant from the release: Settings → Show Design tab, then Design → Load.
+- **Your own tools**: raw HID, over the cable or wireless, for example to read the battery.
+
+Both web tools need a Chromium-based browser; use them with the keyboard on the USB cable.
+
+## Build
 
 ```bash
+git clone --recurse-submodules https://github.com/Freedye/keychron-k3-max-qmk.git
+cd keychron-k3-max-qmk
 python3 -m pip install qmk
-qmk setup Keychron/qmk_firmware
-qmk compile -kb keychron/q1_he/ansi_encoder -km keychron
-qmk flash -kb keychron/q1_he/ansi_encoder -km keychron
+qmk setup -H .
+qmk compile -kb keychron/k3_max/iso/rgb -km keychron
 ```
 
-More build examples:
+Replace `iso/rgb` with your variant. Local builds report `dev` as firmware version;
+`-e KC_FIRMWARE_VERSION=<name>` sets another one (at most 10 characters).
 
-```bash
-make keychron/q1_he/ansi_encoder:keychron
-make keychron/k8_pro/ansi/rgb:keychron
-make keychron/v1_max/ansi_encoder:keychron:flash
-```
+## CI and releases
 
-See the [QMK build environment setup](https://docs.qmk.fm/#/getting_started_build_tools) and [make guide](https://docs.qmk.fm/#/getting_started_make_guide) for details. New to QMK? Start with the [Complete Newbs Guide](https://docs.qmk.fm/#/newbs).
+Every push runs the [K3 Max CI](.github/workflows/build_k3_max.yml):
 
-## Supported Keyboards
+- commit hygiene: whitespace and conflict markers in the pushed commits, submodules from QMK only;
+- `qmk lint` of the six variants, and the VIA definitions checked against the firmware (VID/PID, matrix, keys,
+  lighting menus);
+- the QMK unit tests for what the K3 Max uses: key and layer handling, mouse keys, housekeeping, wear leveling;
+- a build of the six variants, each image checked for size, vector table, the K3 Max ChibiOS fixes and the
+  firmware version, plus a build of the default keymap.
 
-All board definitions live under [`keyboards/keychron/`](keyboards/keychron/) and [`keyboards/lemokey/`](keyboards/lemokey/).
-
-| Series | Boards | Type |
-|--------|--------|------|
-| **Q HE** | Q1 HE, Q2 HE, Q3 HE, Q4 HE, Q5 HE, Q6 HE, Q12 HE | Hall Effect, wireless |
-| **Q / Q Max** | Q0, Q1 v1/v2, Q1 Max, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q9 Plus, Q10, Q11, Q12, Q60, Q65 | Mechanical, various |
-| **K HE** | K2 HE, K4 HE, K6 HE, K8 HE, K10 HE | Hall Effect, wireless |
-| **K Max / K Pro** | K4 Max, K8 Max, K8 Pro, K9 Max | Mechanical, wireless |
-| **V / V Max** | V1, V1 8K, V1 Max, V2, V3, V4, V5, V5 Max, V6, V6 v2, V6 Max, V7, V8, V10 | Mechanical, wired/wireless |
-| **C Pro** | C1 Pro, C1 Pro v2, C1 Pro 8K, C2 Pro, C2 Pro v2, C2 Pro 8K, C3 Pro, C3 Pro 8K | Mechanical, wired |
-| **S / X** | S1, X0 | Mechanical |
-| **Lemokey** | L1 HE, P1 HE, P2 HE | Hall Effect gaming |
-
-Each board folder contains its own `readme.md` with exact build targets, product links, and reset instructions.
-
-## Hardware Design
-
-For PCB files, schematics, and hardware design resources, see the companion repository:
-
-[Keychron-Keyboards-Hardware-Design](https://github.com/Keychron/Keychron-Keyboards-Hardware-Design)
-
-## Community and Support
-
-- **Join the community**  
-  Join the [Keychron Discord](https://discord.com/invite/HAYbRrTsjN) to share builds, ask questions, and help grow the hardware modding community.
-- [Keychron Website](https://www.keychron.com)
-- [Keychron on Reddit](https://www.reddit.com/r/Keychron/)
-- [QMK Discord](https://discord.gg/qmk)
-- [QMK Documentation](https://docs.qmk.fm)
-
-## Contributing
-
-Contributions are welcome — whether it's a new keymap, a bug fix, or documentation improvement. See [`docs/contributing.md`](docs/contributing.md) for guidelines on submitting pull requests.
+Every green push to `master` becomes a release: `v0.0.1` first, then the patch number goes up by one.
 
 ## License
 
-This project is licensed under the [GNU General Public License v2.0](LICENSE).
-
-This repository tracks the [upstream QMK firmware](https://github.com/qmk/qmk_firmware) with Keychron-specific board definitions and firmware additions.
+[GNU General Public License v2.0](LICENSE). Based on [Keychron's QMK firmware](https://github.com/Keychron/qmk_firmware)
+and on [QMK](https://github.com/qmk/qmk_firmware).
