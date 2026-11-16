@@ -22,6 +22,12 @@
 #define P24G_HOST_INDEX 24
 #define USB_HOST_INDEX 34
 
+/* Same default as quantum/led.c: info.json only emits LED_PIN_ON_STATE when
+ * indicators.on_state is set explicitly, and qmk lint rejects the default value */
+#ifndef LED_PIN_ON_STATE
+#    define LED_PIN_ON_STATE 1
+#endif
+
 /* Indication of pairing */
 #ifndef INDICATOR_CONFIG_PARING
 #    define INDICATOR_CONFIG_PARING {INDICATOR_BLINK, 1000, 1000, 0, true, 0};
