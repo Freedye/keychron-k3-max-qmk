@@ -31,6 +31,8 @@
 #endif
 
 #ifdef LK_WIRELESS_ENABLE
+/* Accept raw HID (VIA / Keychron commands) through the wireless link */
+#    define WILRESS_RAW_ENABLE
 /* Hardware configuration */
 #    define P24G_MODE_SELECT_PIN A10
 #    define BT_MODE_SELECT_PIN A9

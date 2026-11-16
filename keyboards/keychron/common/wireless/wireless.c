@@ -609,11 +609,8 @@ void wireless_event_task(void) {
                 break;
 #if defined(RAW_ENABLE) && defined(WILRESS_RAW_ENABLE)
             case EVT_RAW_HID:
-#    ifdef VIA_ENABLE
-                via_raw_hid_receive(RAW_HID_SRC_WIRELESS, event.params.raw_hid_data, 32);
-#    else
-                kc_raw_hid_rx(RAW_HID_SRC_WIRELESS, event.params.raw_hid_data, 32);
-#    endif
+                /* Same entry point as USB: VIA provides it, otherwise keychron_raw_hid.c forwards to kc_raw_hid_rx() */
+                raw_hid_receive(RAW_HID_SRC_WIRELESS, event.params.raw_hid_data, 32);
                 lpm_timer_reset();
                 break;
 #endif
