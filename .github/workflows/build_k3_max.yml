@@ -1,0 +1,186 @@
+name: K3 Max CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# Only keep the latest run for each branch
+concurrency:
+  group: k3-max-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KEYMAP: keychron
+
+jobs:
+  # Cheap checks on the commit itself: whitespace errors, CRLF line endings, leftover conflict markers
+  hygiene:
+    name: "Commit hygiene"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
+
+      - name: Check the diff of every pushed commit
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Pull requests are checked out as a merge commit, whose first parent is the base branch.
+          # On push, check everything since the previous tip, falling back to the last commit when it is
+          # unknown (new branch) or no longer reachable (force push).
+          base="HEAD~1"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ -n "$BEFORE" ] \
+             && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+             && git merge-base --is-ancestor "$BEFORE" HEAD; then
+            base="$BEFORE"
+          fi
+          echo "Checking $(git rev-parse --short "$base")..$(git rev-parse --short HEAD)"
+          git diff --check "$base" HEAD || {
+            echo "::error::Whitespace errors, CRLF line endings or conflict markers found in the pushed commits"
+            exit 1
+          }
+
+      - name: Check for leftover conflict markers in tracked firmware code
+        run: |
+          if git grep -nE '^(<<<<<<< |>>>>>>> |=======$)' -- 'keyboards/keychron' 'quantum' 'platforms' 'tmk_core' ':!*.md'; then
+            echo "::error::Conflict markers found"
+            exit 1
+          fi
+
+  # Static checks of every K3 Max variant: info.json / keyboard.json schema, keymap and layout consistency
+  lint:
+    name: "Lint K3 Max variants"
+    runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
+
+    steps:
+      - name: Disable safe.directory check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: pip3 install -r requirements-dev.txt
+
+      - name: Lint all variants
+        shell: 'bash {0}'
+        run: |
+          failed=0
+          for layout in ansi iso jis; do
+            for backlight in rgb white; do
+              kb="keychron/k3_max/${layout}/${backlight}"
+              echo "::group::qmk lint ${kb}"
+              qmk lint -kb "$kb" -km "$KEYMAP" || failed=1
+              echo "::endgroup::"
+            done
+          done
+          exit $failed
+
+  # QMK core tests (wear leveling, EEPROM, ...), since this fork carries changes in quantum/
+  unit-tests:
+    name: "Unit tests"
+    runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
+
+    steps:
+      - name: Disable safe.directory check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: pip3 install -r requirements-dev.txt
+
+      # Only the QMK core suites for what the K3 Max uses: key and layer handling, mouse keys,
+      # housekeeping and the wear leveling behind its EEPROM. The other ~80 cover code it does not use.
+      - name: Run tests
+        run: qmk test-c -j $(nproc) -t basic -t mousekeys -t housekeeping -t 'wear_leveling_*'
+
+  build:
+    name: "Build ${{ matrix.layout }} ${{ matrix.backlight }}"
+    runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
+
+    strategy:
+      fail-fast: false
+      matrix:
+        layout: [ansi, iso, jis]
+        backlight: [rgb, white]
+
+    env:
+      KEYBOARD: keychron/k3_max/${{ matrix.layout }}/${{ matrix.backlight }}
+      # The layout is the last part of the name, e.g. k3_max_keychron_rgb_ansi.bin
+      FIRMWARE: k3_max_keychron_${{ matrix.backlight }}_${{ matrix.layout }}
+
+    steps:
+      - name: Disable safe.directory check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout firmware
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: pip3 install -r requirements-dev.txt
+
+      - name: Compile
+        run: |
+          qmk compile -j $(nproc) -kb "$KEYBOARD" -km "$KEYMAP"
+
+      - name: Rename and sanity check firmware
+        run: |
+          built="$(echo "${KEYBOARD}_${KEYMAP}" | tr '/' '_').bin"
+          if [ ! -f "$built" ]; then
+            echo "::error::Expected firmware $built was not produced"
+            ls -la *.bin *.hex *.uf2 2>/dev/null || true
+            exit 1
+          fi
+          mv "$built" "${FIRMWARE}.bin"
+          size=$(stat -c %s "${FIRMWARE}.bin")
+          # STM32F401 has 512 KiB of flash: an empty or oversized image can never be flashed correctly
+          if [ "$size" -lt 16384 ] || [ "$size" -gt 524288 ]; then
+            echo "::error::Firmware size $size bytes is outside the expected range"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${FIRMWARE}.bin"
+            echo ""
+            echo "- Keyboard: \`${KEYBOARD}\`, keymap: \`${KEYMAP}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Size: $(stat -c %s "${FIRMWARE}.bin") bytes"
+            echo "- SHA-256: \`$(sha256sum "${FIRMWARE}.bin" | cut -d' ' -f1)\`"
+            echo ""
+            echo "Flash it with QMK Toolbox, or from DFU mode with:"
+            echo ""
+            echo '```'
+            echo "dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D ${FIRMWARE}.bin"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.FIRMWARE }}
+          path: ${{ env.FIRMWARE }}.bin
+          if-no-files-found: error
+          retention-days: 30
+
