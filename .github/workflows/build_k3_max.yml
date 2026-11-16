@@ -145,6 +145,9 @@ jobs:
           done
           exit $failed
 
+      - name: Check the VIA definitions against the firmware
+        run: python3 .github/scripts/check_via_definitions.py keyboards/keychron/k3_max
+
   # QMK core tests (wear leveling, EEPROM, ...), since this fork carries changes in quantum/
   unit-tests:
     name: "Unit tests"
@@ -239,6 +242,18 @@ jobs:
             echo "::error::Reset handler is not Thumb code inside the image"
             exit 1
           fi
+
+      - name: Check the firmware version string
+        run: |
+          # The Keychron firmware version reply (0xA1) starts with KC_FIRMWARE_VERSION, a string literal in the image
+          python3 - "${FIRMWARE}.bin" "$VERSION" <<'EOF'
+          import re, sys
+          image, version = open(sys.argv[1], 'rb').read(), sys.argv[2]
+          if not re.search(rb'(?<![0-9A-Za-z.-])' + re.escape(version.encode()) + rb'\0', image):
+              print(f'::error::The image does not contain the firmware version {version}')
+              sys.exit(1)
+          print(f'Firmware version: {version}')
+          EOF
 
       - name: Check that the K3 Max ChibiOS fixes are linked
         run: |
