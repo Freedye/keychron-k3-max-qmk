@@ -57,7 +57,7 @@ The Keychron Launcher shows the firmware version as `<version> <build date>`:
 ## Configure
 
 - **[Keychron Launcher](https://launcher.keychron.com/)**: everything, including the Keychron-only settings
-  (per-key RGB, mixed lighting, report rate, wireless settings).
+  (per-key RGB, mixed lighting, debounce, wireless settings).
 - **[VIA](https://usevia.app/)**: keymap, layers, macros and lighting. If VIA does not recognize the keyboard,
   load the definition of your variant from the release: Settings → Show Design tab, then Design → Load.
 - **Your own tools**: raw HID, over the cable or wireless, for example to read the battery.
