@@ -24,5 +24,6 @@ void factory_reset(void);
 bool factory_reset_indicating(void);
 void factory_test_task(void);
 void factory_test_rx(bool usb, uint8_t *data, uint8_t length);
+void factory_test_dip_switch_update(uint8_t index, bool active);
 
 bool process_record_factory_test(uint16_t keycode, keyrecord_t *record);

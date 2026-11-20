@@ -15,15 +15,24 @@
  */
 
 #include "keychron.h"
+#ifdef FACTORY_TEST_ENABLE
+#    include "factory_test.h"
+#endif
 
 #define POWER_ON_LED_DURATION 3000
 static uint32_t power_on_indicator_timer;
 
 bool dip_switch_update_kb(uint8_t index, bool active) {
+#ifdef FACTORY_TEST_ENABLE
+    factory_test_dip_switch_update(index, active);
+#endif
+    if (!dip_switch_update_user(index, active)) {
+        return false;
+    }
+
     if (index == 0) {
         default_layer_set(1UL << (active ? 0 : 2));
     }
-    dip_switch_update_user(index, active);
 
     return true;
 }

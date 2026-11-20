@@ -551,7 +551,7 @@ void factory_test_rx(bool usb, uint8_t *data, uint8_t length) {
     }
 }
 
-bool dip_switch_update_user(uint8_t index, bool active) {
+void factory_test_dip_switch_update(uint8_t index, bool active) {
     if (report_os_sw_state) {
 #ifdef INVERT_OS_SWITCH_STATE
         active = !active;
@@ -559,6 +559,12 @@ bool dip_switch_update_user(uint8_t index, bool active) {
         uint8_t payload[3] = {FACTORY_TEST_CMD_OS_SWITCH, OS_SWITCH, active};
         factory_test_send(true, payload, 3);
     }
+}
 
+#ifndef FACTORY_TEST_DIP_SWITCH_KB
+// boards defining FACTORY_TEST_DIP_SWITCH_KB call it from dip_switch_update_kb()
+bool dip_switch_update_user(uint8_t index, bool active) {
+    factory_test_dip_switch_update(index, active);
     return true;
 }
+#endif
