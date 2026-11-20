@@ -129,7 +129,7 @@ __attribute__((weak)) void battery_calculate_voltage(bool src_bt, uint16_t value
     if (rgb_matrix_is_enabled()) {
 
         /* We assumpt it is linear relationship*/
-        uint32_t compensation = (VOLTAGE_TRIM_LED_MATRIX * rgb_matrix_driver.get_total_duty_ratio());
+        uint32_t compensation = (VOLTAGE_TRIM_RGB_MATRIX * rgb_matrix_driver.get_total_duty_ratio());
         voltage += compensation;
     }
 #endif
