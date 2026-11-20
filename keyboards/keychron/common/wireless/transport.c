@@ -21,6 +21,7 @@
 #include "mousekey.h"
 #if defined(PROTOCOL_CHIBIOS)
 #    include <usb_main.h>
+#    define USB_GETSTATUS_REMOTE_WAKEUP_ENABLED (2U) // same as tmk_core/protocol/chibios/chibios.c
 #endif
 #include "transport.h"
 #if defined(LK_WIRELESS_ENABLE)
@@ -269,11 +270,11 @@ void usb_remote_wakeup(void) {
             /* Do this in the suspended state */
             suspend_power_down(); // on AVR this deep sleeps for 15ms
             /* Remote wakeup */
-            if (suspend_wakeup_condition()
+            if ((USB_DRIVER.status & USB_GETSTATUS_REMOTE_WAKEUP_ENABLED) && (suspend_wakeup_condition()
 #ifdef ENCODER_ENABLE
                 || encoder_task()
 #endif
-            ) {
+            )) {
                 usbWakeupHost(&USB_DRIVER);
                 wait_ms(300);
 #ifdef MOUSEKEY_ENABLE
@@ -297,10 +298,8 @@ void usb_remote_wakeup(void) {
         }
         /* Woken up */
         // variables has been already cleared by the wakeup hook
+        // no mouse report: Windows takes it as input and leaves standby
         send_keyboard_report();
-#ifdef MOUSEKEY_ENABLE
-        mousekey_send();
-#endif /* MOUSEKEY_ENABLE */
     }
 }
 
