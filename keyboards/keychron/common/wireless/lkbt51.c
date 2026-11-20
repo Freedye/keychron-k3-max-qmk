@@ -328,10 +328,12 @@ void lkbt51_send_cmd(uint8_t* payload, uint8_t len, bool ack_enable, bool retry)
 #endif
 }
 
+// payload gets the 4 header bytes too, so it must hold len + 4 bytes
 void lkbt51_read(uint8_t* payload, uint8_t len) {
     uint8_t i;
-    uint8_t pkt[PACKET_MAX_LEN] = {0};
-    memset(pkt, 0, PACKET_MAX_LEN);
+    uint8_t pkt[PACKET_MAX_LEN + 4] = {0};
+
+    if (len > PACKET_MAX_LEN) len = PACKET_MAX_LEN;
 
     i        = 0;
     pkt[i++] = 0x84;
@@ -893,7 +895,7 @@ static void lkbt51_event_handler(uint8_t evt_type, uint8_t* data, uint8_t len, u
 
 void lkbt51_task(void) {
 #define VALID_DATA_START_INDEX 4
-#define BUFFER_SIZE 64
+#define BUFFER_SIZE (PACKET_MAX_LEN + VALID_DATA_START_INDEX)
 
     static bool    wait_for_new_pkt = true;
     static uint8_t len              = 0xff;
@@ -998,18 +1000,21 @@ void lkbt51_task(void) {
             }
         }
 
-        if (!wait_for_new_pkt && BUFFER_SIZE - 5 >= len) {
+        if (!wait_for_new_pkt) {
             wait_for_new_pkt = true;
 
-            uint16_t checksum = 0;
-            for (int i = 0; i < len - 2; i++) {
-                checksum += pbuf[i];
-            }
+            // type + data + 2 checksum bytes, all inside buf
+            if (len >= 3 && len <= buf + BUFFER_SIZE - pbuf) {
+                uint16_t checksum = 0;
+                for (int i = 0; i < len - 2; i++) {
+                    checksum += pbuf[i];
+                }
 
-            if ((checksum & 0xff) == pbuf[len - 2] && ((checksum >> 8) & 0xff) == pbuf[len - 1]) {
-                lkbt51_event_handler(pbuf[0], pbuf + 1, len - 3, sn);
-            } else {
-                // TODO: Error handle
+                if ((checksum & 0xff) == pbuf[len - 2] && ((checksum >> 8) & 0xff) == pbuf[len - 1]) {
+                    lkbt51_event_handler(pbuf[0], pbuf + 1, len - 3, sn);
+                } else {
+                    // TODO: Error handle
+                }
             }
         }
     }
