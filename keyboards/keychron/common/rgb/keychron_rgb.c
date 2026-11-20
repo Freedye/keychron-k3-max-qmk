@@ -144,7 +144,7 @@ static bool rgb_get_led_count(uint8_t *data) {
 
 static bool rgb_get_led_idx(uint8_t *data) {
     uint8_t row = data[0];
-    if (row > MATRIX_ROWS) return false;
+    if (row >= MATRIX_ROWS) return false;
 
     uint8_t  led_idx[128];
     uint32_t row_mask = 0;
@@ -184,7 +184,7 @@ static bool per_key_rgb_get_led_color(uint8_t *data) {
 
     if (count > 9) return false;
 
-    for (uint8_t i = 0; i < count; i++) {
+    for (uint8_t i = 0; i < count && start + i < RGB_MATRIX_LED_COUNT; i++) {
         data[1 + i * 3] = per_key_led[start + i].h;
         data[2 + i * 3] = per_key_led[start + i].s;
         data[3 + i * 3] = per_key_led[start + i].v;
@@ -199,7 +199,7 @@ static bool per_key_rgb_set_led_color(uint8_t *data) {
 
     if (count > 9) return false;
 
-    for (uint8_t i = 0; i < count; i++) {
+    for (uint8_t i = 0; i < count && start + i < RGB_MATRIX_LED_COUNT; i++) {
         per_key_led[start + i].h = data[2 + i * 3];
         per_key_led[start + i].s = data[3 + i * 3];
         per_key_led[start + i].v = data[4 + i * 3];
@@ -245,7 +245,7 @@ static bool mixed_rgb_get_effect_list(uint8_t *data) {
     uint8_t start  = data[1];
     uint8_t count  = data[2];
 
-    if (count > 3 || region > EFFECT_LAYERS || start + count > EFFECTS_PER_LAYER) return false;
+    if (count > 3 || region >= EFFECT_LAYERS || start + count > EFFECTS_PER_LAYER) return false;
 
     for (uint8_t i = 0; i < count; i++) {
         data[1 + i * EFFECT_DATA_LEN] = effect_list[region][start + i].effect;
@@ -263,7 +263,7 @@ bool mixed_rgb_set_effect_list(uint8_t *data) {
     uint8_t start  = data[1];
     uint8_t count  = data[2];
 
-    if (count > 3 || region > EFFECT_LAYERS || start + count > EFFECTS_PER_LAYER) return false;
+    if (count > 3 || region >= EFFECT_LAYERS || start + count > EFFECTS_PER_LAYER) return false;
     for (uint8_t i = 0; i < count; i++) {
         if (data[3 + i * EFFECT_DATA_LEN] >= RGB_MATRIX_CUSTOM_MIXED_RGB) return false;
     }
