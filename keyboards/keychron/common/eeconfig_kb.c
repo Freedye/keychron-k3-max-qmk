@@ -19,6 +19,12 @@
 #    include "keychron_debounce.h"
 #endif
 
+#ifdef NVM_DRIVER_EEPROM
+#    include "nvm_eeprom_eeconfig_internal.h"
+// Keychron data uses fixed addresses right after the QMK core config
+_Static_assert(EECONFIG_BASE_LANGUAGE == EECONFIG_BASE_SIZE, "QMK eeconfig size changed, update EECONFIG_BASE_*");
+#endif
+
 void eeconfig_init_kb_datablock(void) {
 #ifdef DYNAMIC_DEBOUNCE_ENABLE
     extern void debounce_config_reset(void);

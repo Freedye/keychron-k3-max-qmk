@@ -79,3 +79,5 @@
 #define FN_KEY_1 MO(1)
 #define FN_KEY_2 MO(3)
 
+#define FACTORY_TEST_DIP_SWITCH_KB
+
