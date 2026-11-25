@@ -10,6 +10,7 @@ WIRELESS_DIR = $(TOP_DIR)/keyboards/keychron/common/wireless
 SRC += \
      $(WIRELESS_DIR)/wireless.c \
      $(WIRELESS_DIR)/report_buffer.c \
+     $(WIRELESS_DIR)/pending_report.c \
      $(WIRELESS_DIR)/ckbt51.c \
      $(WIRELESS_DIR)/indicator.c \
      $(WIRELESS_DIR)/wireless_main.c \
