@@ -17,6 +17,7 @@
 #include "quantum.h"
 #include "wireless.h"
 #include "report_buffer.h"
+#include "pending_report.h"
 #include "lpm.h"
 #include "battery.h"
 #include "indicator.h"
@@ -286,6 +287,10 @@ static void wireless_enter_connected(uint8_t host_idx) {
     host_index = host_idx;
 
     clear_keyboard();
+#ifndef DISABLE_REPORT_BUFFER
+    /* After the empty report of clear_keyboard(), so the keys typed while reconnecting are not released at once */
+    pending_report_flush();
+#endif
 
     /* Enable NKRO since it may be disabled in pin code entry */
 #if defined(NKRO_ENABLE) && !defined(WIRELESS_NKRO_ENABLE)
@@ -422,6 +427,12 @@ void wireless_send_keyboard(report_keyboard_t *report) {
 #endif
         }
     } else if (wireless_state != WT_RESET) {
+#ifndef DISABLE_REPORT_BUFFER
+        report_buffer_t pending;
+        pending.type = REPORT_TYPE_KB;
+        memcpy(&pending.keyboard, report, sizeof(report_keyboard_t));
+        pending_report_add(&pending);
+#endif
         wireless_connect();
     }
 }
@@ -447,6 +458,12 @@ void wireless_send_nkro(report_nkro_t *report) {
 #endif
         }
     } else if (wireless_state != WT_RESET) {
+#ifndef DISABLE_REPORT_BUFFER
+        report_buffer_t pending;
+        pending.type = REPORT_TYPE_NKRO;
+        memcpy(&pending.nkro, report, sizeof(report_nkro_t));
+        pending_report_add(&pending);
+#endif
         wireless_connect();
     }
 }

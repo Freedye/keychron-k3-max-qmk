@@ -36,6 +36,7 @@
 #include "transport.h"
 #include "battery.h"
 #include "report_buffer.h"
+#include "pending_report.h"
 #include "keychron_common.h"
 
 extern matrix_row_t matrix[MATRIX_ROWS];
@@ -390,5 +391,7 @@ void lpm_task(void) {
     lpm_post_wakeup();
     lpm_timer_reset();
     report_buffer_init();
+    /* The timer restarted from 0 in lpm_wakeup(), so queued times are meaningless */
+    pending_report_clear();
     lpm_set(PM_RUN);
 }
