@@ -58,15 +58,20 @@ void pending_report_add(report_buffer_t *report) {
     write_idx               = next;
 }
 
-void pending_report_flush(void) {
+bool pending_report_flush(void) {
+    bool sent = false;
+
     /* Reports are in time order, so dropping the old ones never keeps a press
-     * without the release that follows it. */
+     * without the release that follows it, and the last one sent is the newest. */
     while (read_idx != write_idx) {
         if (timer_elapsed32(queue[read_idx].time) <= PENDING_REPORT_TIMEOUT_MS) {
             report_buffer_enqueue(&queue[read_idx].report);
+            sent = true;
         }
         read_idx = (read_idx + 1) % PENDING_REPORT_QUEUE_SIZE;
     }
+
+    return sent;
 }
 
 void pending_report_clear(void) {

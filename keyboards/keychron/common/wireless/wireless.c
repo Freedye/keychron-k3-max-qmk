@@ -286,11 +286,14 @@ static void wireless_enter_connected(uint8_t host_idx) {
     indicator_set(wireless_state, host_idx);
     host_index = host_idx;
 
-    clear_keyboard();
+    /* Send the keys typed while reconnecting. Their last report is the current key
+     * state, so the host and QMK agree and held keys stay held. Without them, release
+     * whatever the host may still hold from before the link went down. */
+    bool sent_pending = false;
 #ifndef DISABLE_REPORT_BUFFER
-    /* After the empty report of clear_keyboard(), so the keys typed while reconnecting are not released at once */
-    pending_report_flush();
+    sent_pending = pending_report_flush();
 #endif
+    if (!sent_pending) clear_keyboard();
 
     /* Enable NKRO since it may be disabled in pin code entry */
 #if defined(NKRO_ENABLE) && !defined(WIRELESS_NKRO_ENABLE)

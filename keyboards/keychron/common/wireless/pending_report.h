@@ -20,5 +20,5 @@
 
 /* Reports produced while the wireless link is down, sent once it is back */
 void pending_report_add(report_buffer_t *report);
-void pending_report_flush(void);
+bool pending_report_flush(void); // true if it sent any report
 void pending_report_clear(void);
