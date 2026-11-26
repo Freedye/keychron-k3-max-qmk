@@ -17,6 +17,7 @@
 #include "quantum.h"
 #include "wireless.h"
 #include "report_buffer.h"
+#include "pending_report.h"
 #include "lpm.h"
 #include "battery.h"
 #include "indicator.h"
@@ -228,6 +229,7 @@ void wireless_connect_ex(uint8_t host_idx, uint16_t timeout) {
 
         host_index = host_idx;
         led_state  = 0;
+        pending_report_cancel();
     }
     wireless_transport.connect_ex(host_idx, timeout);
     wireless_state = WT_RECONNECTING;
@@ -285,7 +287,14 @@ static void wireless_enter_connected(uint8_t host_idx) {
     indicator_set(wireless_state, host_idx);
     host_index = host_idx;
 
-    clear_keyboard();
+    /* Send the keys typed while reconnecting. Their last report is the current key
+     * state, so the host and QMK agree and held keys stay held. Without them, release
+     * whatever the host may still hold from before the link went down. */
+    bool sent_pending = false;
+#ifndef DISABLE_REPORT_BUFFER
+    sent_pending = pending_report_flush();
+#endif
+    if (!sent_pending) clear_keyboard();
 
     /* Enable NKRO since it may be disabled in pin code entry */
 #if defined(NKRO_ENABLE) && !defined(WIRELESS_NKRO_ENABLE)
@@ -407,6 +416,7 @@ void wireless_send_keyboard(report_keyboard_t *report) {
     if (battery_is_critical_low()) return;
     if (wireless_state == WT_PARING && !pincodeEntry) return;
     if (wireless_state == WT_CONNECTED || (wireless_state == WT_PARING && pincodeEntry)) {
+        pending_report_activity();
         if (wireless_transport.send_keyboard) {
 #ifndef DISABLE_REPORT_BUFFER
             bool empty = report_buffer_is_empty();
@@ -422,6 +432,12 @@ void wireless_send_keyboard(report_keyboard_t *report) {
 #endif
         }
     } else if (wireless_state != WT_RESET) {
+#ifndef DISABLE_REPORT_BUFFER
+        report_buffer_t pending;
+        pending.type = REPORT_TYPE_KB;
+        memcpy(&pending.keyboard, report, sizeof(report_keyboard_t));
+        pending_report_add(&pending);
+#endif
         wireless_connect();
     }
 }
@@ -432,6 +448,7 @@ void wireless_send_nkro(report_nkro_t *report) {
     if (wireless_state == WT_PARING && !pincodeEntry) return;
 
     if (wireless_state == WT_CONNECTED || (wireless_state == WT_PARING && pincodeEntry)) {
+        pending_report_activity();
         if (wireless_transport.send_nkro) {
 #ifndef DISABLE_REPORT_BUFFER
             bool empty = report_buffer_is_empty();
@@ -447,6 +464,12 @@ void wireless_send_nkro(report_nkro_t *report) {
 #endif
         }
     } else if (wireless_state != WT_RESET) {
+#ifndef DISABLE_REPORT_BUFFER
+        report_buffer_t pending;
+        pending.type = REPORT_TYPE_NKRO;
+        memcpy(&pending.nkro, report, sizeof(report_nkro_t));
+        pending_report_add(&pending);
+#endif
         wireless_connect();
     }
 }

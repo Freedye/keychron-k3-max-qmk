@@ -12,6 +12,9 @@ Keychron.
 - **Raw HID over Bluetooth and 2.4 GHz**, not only over USB, with and without VIA.
 - **Battery readout**: raw HID command `0xA7 0xF0` returns level, voltage, charging state, transport and wireless
   state.
+- **The key that wakes the keyboard is not lost** over Bluetooth and 2.4 GHz: after a pause of at least 10
+  seconds, the keys pressed while the link is down are sent once it is back, if that takes less than 5 seconds.
+  When the link drops while typing or switching host, the keys are still dropped instead of arriving late.
 - **Release number as firmware version** in the Keychron web tool.
 - Fixes to the EEPROM emulation and to the build of the ANSI RGB and white-backlight variants.
 
