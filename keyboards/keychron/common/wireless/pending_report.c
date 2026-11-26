@@ -20,61 +20,100 @@
 
 /* The key that wakes the keyboard is pressed while the wireless link is down, and
  * so are the ones typed while it reconnects. Their reports are kept here instead of
- * being dropped, and handed to the report buffer once the link is up again. Reports
- * older than PENDING_REPORT_TIMEOUT_MS by then are dropped, so a slow or failed
- * reconnection does not type stale keys later.
+ * being dropped, and handed to the report buffer once the link is up again.
+ *
+ * Only a keyboard that was idle starts collecting: when the link goes down while
+ * typing (lost signal, host or transport switch) the keys are still dropped, as
+ * they would reach the host late. Collecting then lasts PENDING_REPORT_WINDOW_MS:
+ * if the link is not back by then, every collected report is dropped, so the host
+ * never gets only the end of what was typed.
  */
 #ifndef PENDING_REPORT_QUEUE_SIZE
 #    define PENDING_REPORT_QUEUE_SIZE 16
 #endif
 
-#ifndef PENDING_REPORT_TIMEOUT_MS
-#    define PENDING_REPORT_TIMEOUT_MS 3000
+/* No keyboard report for this long makes the keyboard idle */
+#ifndef PENDING_REPORT_IDLE_MS
+#    define PENDING_REPORT_IDLE_MS 10000
 #endif
 
-typedef struct {
-    report_buffer_t report;
-    uint32_t        time; // timer_read32() when the report was queued
-} pending_report_t;
+/* How long collected reports wait for the link, from the first one. The wireless
+ * module gives up reconnecting after 5 seconds (reconnect_timeout). */
+#ifndef PENDING_REPORT_WINDOW_MS
+#    define PENDING_REPORT_WINDOW_MS 5000
+#endif
 
-static pending_report_t queue[PENDING_REPORT_QUEUE_SIZE];
-static uint8_t          write_idx = 0;
-static uint8_t          read_idx  = 0;
+static report_buffer_t queue[PENDING_REPORT_QUEUE_SIZE];
+static uint8_t         write_idx = 0;
+static uint8_t         read_idx  = 0;
+
+static bool     collecting       = false;
+static uint32_t collect_time     = 0;    // first report collected
+static bool     idle             = true; // no report since boot or wakeup, last_report_time is meaningless
+static uint32_t last_report_time = 0;    // last keyboard report, sent or not
+
+static void drop(void) {
+    read_idx   = 0;
+    write_idx  = 0;
+    collecting = false;
+}
+
+static bool window_expired(void) {
+    return timer_elapsed32(collect_time) > PENDING_REPORT_WINDOW_MS;
+}
+
+void pending_report_activity(void) {
+    idle             = false;
+    last_report_time = timer_read32();
+}
 
 void pending_report_add(report_buffer_t *report) {
+    bool was_idle = idle || timer_elapsed32(last_report_time) >= PENDING_REPORT_IDLE_MS;
+    pending_report_activity();
+
+    if (collecting && window_expired()) drop();
+
+    if (!collecting) {
+        if (!was_idle) return;
+        collecting   = true;
+        collect_time = timer_read32();
+    }
+
     uint8_t next = (write_idx + 1) % PENDING_REPORT_QUEUE_SIZE;
 
     if (next == read_idx) {
         /* Full: overwrite the newest entry. A report holds every key down at that
          * moment, so the last one is the current state and must not be lost. */
-        uint8_t last       = (write_idx + PENDING_REPORT_QUEUE_SIZE - 1) % PENDING_REPORT_QUEUE_SIZE;
-        queue[last].report = *report;
-        queue[last].time   = timer_read32();
+        queue[(write_idx + PENDING_REPORT_QUEUE_SIZE - 1) % PENDING_REPORT_QUEUE_SIZE] = *report;
         return;
     }
 
-    queue[write_idx].report = *report;
-    queue[write_idx].time   = timer_read32();
-    write_idx               = next;
+    queue[write_idx] = *report;
+    write_idx        = next;
 }
 
 bool pending_report_flush(void) {
     bool sent = false;
 
-    /* Reports are in time order, so dropping the old ones never keeps a press
-     * without the release that follows it, and the last one sent is the newest. */
-    while (read_idx != write_idx) {
-        if (timer_elapsed32(queue[read_idx].time) <= PENDING_REPORT_TIMEOUT_MS) {
-            report_buffer_enqueue(&queue[read_idx].report);
-            sent = true;
+    if (collecting && !window_expired()) {
+        while (read_idx != write_idx) {
+            report_buffer_enqueue(&queue[read_idx]);
+            read_idx = (read_idx + 1) % PENDING_REPORT_QUEUE_SIZE;
+            sent     = true;
         }
-        read_idx = (read_idx + 1) % PENDING_REPORT_QUEUE_SIZE;
     }
+    drop();
 
     return sent;
 }
 
+void pending_report_cancel(void) {
+    drop();
+    /* Count the switch as typing, so the keys pressed right after it are dropped */
+    pending_report_activity();
+}
+
 void pending_report_clear(void) {
-    read_idx  = 0;
-    write_idx = 0;
+    drop();
+    idle = true;
 }

@@ -18,7 +18,9 @@
 
 #include "report_buffer.h"
 
-/* Reports produced while the wireless link is down, sent once it is back */
-void pending_report_add(report_buffer_t *report);
-bool pending_report_flush(void); // true if it sent any report
-void pending_report_clear(void);
+/* Reports made while the wireless link is down, sent once it is back */
+void pending_report_add(report_buffer_t *report); // the link is down
+void pending_report_activity(void);               // a report went out over the link
+bool pending_report_flush(void);                  // the link is up: true if it sent any report
+void pending_report_cancel(void);                 // host or transport switch
+void pending_report_clear(void);                  // wakeup from low power mode

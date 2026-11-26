@@ -229,6 +229,7 @@ void wireless_connect_ex(uint8_t host_idx, uint16_t timeout) {
 
         host_index = host_idx;
         led_state  = 0;
+        pending_report_cancel();
     }
     wireless_transport.connect_ex(host_idx, timeout);
     wireless_state = WT_RECONNECTING;
@@ -415,6 +416,7 @@ void wireless_send_keyboard(report_keyboard_t *report) {
     if (battery_is_critical_low()) return;
     if (wireless_state == WT_PARING && !pincodeEntry) return;
     if (wireless_state == WT_CONNECTED || (wireless_state == WT_PARING && pincodeEntry)) {
+        pending_report_activity();
         if (wireless_transport.send_keyboard) {
 #ifndef DISABLE_REPORT_BUFFER
             bool empty = report_buffer_is_empty();
@@ -446,6 +448,7 @@ void wireless_send_nkro(report_nkro_t *report) {
     if (wireless_state == WT_PARING && !pincodeEntry) return;
 
     if (wireless_state == WT_CONNECTED || (wireless_state == WT_PARING && pincodeEntry)) {
+        pending_report_activity();
         if (wireless_transport.send_nkro) {
 #ifndef DISABLE_REPORT_BUFFER
             bool empty = report_buffer_is_empty();
